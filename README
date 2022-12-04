@@ -1,0 +1,10 @@
+212733257 319097036
+
+in the makefile there is a make all command
+1. for mytee, just run ./mytee and every input will be printed to the screen
+2. for the listener, should execute with ./mync -L <port>
+   for the writer, execute with ./mync <IP> <port>
+3. you can run the shell with ./myshell 
+DIR will use our implementation of DIR
+COPY <file1> <file2> will use our implementation of copying
+other then that we implemented like the instructions in the moodle

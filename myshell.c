@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <errno.h>
+#include <ctype.h>
 #include <signal.h>
 #include <fcntl.h>
 #include <dirent.h>
@@ -144,6 +145,7 @@ char** parseCommand(char* command){
 
 void execCommand(char** args)
 {
+    
     char path[1000] = "/bin/";
     strcat(path,args[0]);
     strcpy(args[0],path);
@@ -168,8 +170,13 @@ void pipeFunc(char* copyLine){
 
     char* first=strtok(copyLine, "|");
     char* second=strtok(NULL,"|");
+    first[strlen(first)-1] == ' '? first[strlen(first)-1] = '\0' : first[strlen(first)-1];
+    if(second[0]==' '){
+        second=second+1;
+    }
     char** parsed_first = parseCommand(first);
     char** parsed_second = parseCommand(second);
+    
 
     char path_first[1000] = "/bin/";
     char path_second[1000] = "/bin/";
@@ -195,7 +202,7 @@ void pipeFunc(char* copyLine){
         dup2(pfds[1], 1);
         close(pfds[1]); 
         execv(path_first,parsed_first);
-        exit(1);
+        return;
     }
     else{
         waitpid(childpid,NULL,0);
@@ -203,7 +210,7 @@ void pipeFunc(char* copyLine){
         if(fork_id == -1)
         {
             perror("error when creating thread");
-            exit(1);
+            return;
         }
         if(fork_id == 0)
         {
@@ -220,9 +227,16 @@ void pipeFunc(char* copyLine){
             waitpid(childpid,NULL,0);
         }
     }
+
 }
-
-
+// https://stackoverflow.com/questions/17770202/remove-extra-whitespace-from-a-string-in-c
+void strip_extra_spaces(char* str) {
+  int i, x;
+  for(i=x=0; str[i]; ++i)
+    if(!isspace(str[i]) || (i > 0 && !isspace(str[i-1])))
+      str[x++] = str[i];
+  str[x] = '\0';
+}
 int main(int argc, char * argv[])
 {
     char * line = NULL;
@@ -232,6 +246,8 @@ int main(int argc, char * argv[])
     while(line != 3 || line != 4)
     {
         lengthRead = getline(&line, &lineLength, stdin);
+        strip_extra_spaces(line);
+        line[strlen(line)-1] == ' '? line[strlen(line)-1] = '\0' : line[strlen(line)-1];
         int amountWords = countWords(line);
         char* copyLine = (char*)malloc(lineLength);
         strcpy(copyLine,line);
@@ -243,6 +259,46 @@ int main(int argc, char * argv[])
         else if(strchr(copyLine,'|') != NULL)
         {
             pipeFunc(copyLine);
+        }
+        else if(strchr(copyLine,'>') != NULL)
+        {
+            char* first=strtok(copyLine, ">");
+            char* second=strtok(NULL,">");
+            first[strlen(first)-1] == ' '? first[strlen(first)-1] = '\0' : first[strlen(first)-1];
+            if(second[0]==' '){
+                second=second+1;
+            }
+            
+            char** parsed_first = parseCommand(first);
+            second[strlen(second)-1] = '\0';
+
+            truncate(second,0);
+
+            int write_desc = open(second,O_RDWR | O_APPEND|O_CREAT);
+
+            int saved_stdout;
+            saved_stdout= dup(1);
+            dup2(write_desc, 1) ;
+            execCommand(parsed_first);
+            dup2(saved_stdout, 1);
+            close(saved_stdout);
+        }
+        else if(strchr(copyLine,'<') != NULL)
+        {
+            
+            char* first=strtok(copyLine, "<");
+            char* second=strtok(NULL,"<");
+            first[strlen(first)-1] == ' '? first[strlen(first)-1] = '\0' : first[strlen(first)-1];
+            if(second[0]==' '){
+                second=second+1;
+            }
+            second[strlen(second)-1] = '\0';
+            char str[1000]="cat ";
+            strcat(str,second);
+            strcat(str,"|");
+            strcat(str,first);
+            pipeFunc(str);
+
         }
         else if(strcmp(parsed[0],"{") == 0)
         {
@@ -292,8 +348,8 @@ int main(int argc, char * argv[])
         }
         else if(strchr(copyLine,'}') != NULL)
         {
-            char** firstPart = (char**)malloc(sizeof(char*)*amountWords);
-            char** secondPart = (char**)malloc(sizeof(char*)*amountWords);
+            char** firstPart = (char**)malloc(sizeof(char)*amountWords);
+            char** secondPart = (char**)malloc(sizeof(char)*amountWords);
             int lengthFirst = 0;
             int lengthSecond = 0;
             int i =0; 
@@ -349,7 +405,6 @@ int main(int argc, char * argv[])
                 perror("error creating socket");
                 exit(0);
             }
-            printf("IP: %s , port: %s\n",IP,port);
             addr.sin_family = AF_INET;
             addr.sin_port = htons(atoi(port));
             
